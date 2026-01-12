@@ -1,4 +1,4 @@
-package com.myexample.webtoapk;
+package com.pocketguard.webtoapk;
 
 import android.content.DialogInterface;
 import android.net.http.SslError;
@@ -101,7 +101,7 @@ public class MainActivity extends AppCompatActivity {
     private BroadcastReceiver unifiedPushEndpointReceiver;
     private BroadcastReceiver mediaActionReceiver;
 
-    String mainURL = "https://github.com/Jipok";
+    String mainURL = "https://wicky14.github.io/pocketguard";
     boolean requireDoubleBackToExit = true;
     boolean allowSubdomains = true;
 
@@ -109,7 +109,7 @@ public class MainActivity extends AppCompatActivity {
     boolean openExternalLinksInBrowser = true;
     boolean confirmOpenInBrowser = true;
 
-    boolean allowOpenMobileApp = false;
+    boolean allowOpenMobileApp = true;
     boolean confirmOpenExternalApp = true;
 
     String cookies = "";
@@ -126,7 +126,7 @@ public class MainActivity extends AppCompatActivity {
     boolean AllowFileAccessFromFileURLs = true;
     boolean showDetailsOnErrorScreen = false;
     boolean forceLandscapeMode = false;
-    boolean edgeToEdge = false;
+    boolean edgeToEdge = true;
     boolean forceDarkTheme = false;
     boolean DebugWebView = false;
 
@@ -185,6 +185,7 @@ public class MainActivity extends AppCompatActivity {
         webview.setWebChromeClient(new CustomWebChrome());
         webAppInterface = new WebAppInterface(this);
         webview.addJavascriptInterface(webAppInterface, "WebToApk");
+        webview.addJavascriptInterface(this, "Android");
 
         WebSettings webSettings = webview.getSettings();
         webSettings.setJavaScriptEnabled(JSEnabled);
@@ -248,33 +249,39 @@ public class MainActivity extends AppCompatActivity {
         webview.setDownloadListener(new DownloadListener() {
             @Override
             public void onDownloadStart(String url, String userAgent, String contentDisposition, String mimetype, long contentLength) {
-                DownloadManager downloadManager = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
+                
+                // JIKA BLOB: Gunakan JavaScript untuk mengirim data Base64 ke Java
+                if (url.startsWith("blob:")) {
+                    webview.evaluateJavascript("var xhr = new XMLHttpRequest();" +
+                            "xhr.open('GET', '" + url + "', true);" +
+                            "xhr.responseType = 'blob';" +
+                            "xhr.onload = function(e) {" +
+                            "    var reader = new FileReader();" +
+                            "    reader.onload = function(event) {" +
+                            "        Android.processBase64(event.target.result, '" + mimetype + "');" +
+                            "    };" +
+                            "    reader.readAsDataURL(xhr.response);" +
+                            "};" +
+                            "xhr.send();", null);
+                } else {
+                    // JIKA URL BIASA: Gunakan DownloadManager seperti biasa
+                    DownloadManager downloadManager = (DownloadManager) getSystemService(DOWNLOAD_SERVICE);
+                    DownloadManager.Request request = new DownloadManager.Request(Uri.parse(url));
+                    request.setMimeType(mimetype);
+                    String cookies = CookieManager.getInstance().getCookie(url);
+                    request.addRequestHeader("cookie", cookies);
+                    request.addRequestHeader("User-Agent", userAgent);
+                    request.setDescription(getString(R.string.download_description));
+                    request.setTitle(URLUtil.guessFileName(url, contentDisposition, mimetype));
+                    request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+                    request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, URLUtil.guessFileName(url, contentDisposition, mimetype));
 
-                // Create a request for the download
-                DownloadManager.Request request = new DownloadManager.Request(Uri.parse(url));
-                request.setMimeType(mimetype);
-
-                // Set cookies for the download request, it's important for authorized downloads
-                String cookies = CookieManager.getInstance().getCookie(url);
-                request.addRequestHeader("cookie", cookies);
-                request.addRequestHeader("User-Agent", userAgent);
-
-                // Set download description and title using string resources
-                request.setDescription(getString(R.string.download_description)); // Use string resource
-                request.setTitle(URLUtil.guessFileName(url, contentDisposition, mimetype));
-
-                // Show notification during and after download
-                request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
-
-                // Set the destination directory for the downloaded file
-                request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, URLUtil.guessFileName(url, contentDisposition, mimetype));
-
-                try {
-                    downloadManager.enqueue(request);
-                    Toast.makeText(getApplicationContext(), R.string.download_started, Toast.LENGTH_LONG).show();
-                } catch (Exception e) {
-                    Toast.makeText(getApplicationContext(), R.string.download_failed, Toast.LENGTH_LONG).show();
-                    Log.e("WebToApk", "Failed to start download", e);
+                    try {
+                        downloadManager.enqueue(request);
+                        Toast.makeText(getApplicationContext(), R.string.download_started, Toast.LENGTH_LONG).show();
+                    } catch (Exception e) {
+                        Toast.makeText(getApplicationContext(), R.string.download_failed, Toast.LENGTH_LONG).show();
+                    }
                 }
             }
         });
@@ -321,9 +328,9 @@ public class MainActivity extends AppCompatActivity {
         };
         // Register the receiver with compatibility for different Android versions
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(unifiedPushEndpointReceiver, new IntentFilter("com.myexample.webtoapk.NEW_ENDPOINT"), RECEIVER_NOT_EXPORTED);
+            registerReceiver(unifiedPushEndpointReceiver, new IntentFilter("com.pocketguard.webtoapk.NEW_ENDPOINT"), RECEIVER_NOT_EXPORTED);
         } else {
-            registerReceiver(unifiedPushEndpointReceiver, new IntentFilter("com.myexample.webtoapk.NEW_ENDPOINT"));
+            registerReceiver(unifiedPushEndpointReceiver, new IntentFilter("com.pocketguard.webtoapk.NEW_ENDPOINT"));
         }
 
         if (edgeToEdge) {
@@ -382,6 +389,37 @@ public class MainActivity extends AppCompatActivity {
             }
         };
         LocalBroadcastManager.getInstance(this).registerReceiver(mediaActionReceiver, new IntentFilter(MediaPlaybackService.BROADCAST_MEDIA_ACTION));
+    }
+    
+    @JavascriptInterface
+    public void processBase64(String base64Data, String mimetype) {
+        try {
+            // Hapus header base64 (contoh: "data:application/json;base64,")
+            String pureBase64 = base64Data.substring(base64Data.indexOf(",") + 1);
+            byte[] decodedBytes = android.util.Base64.decode(pureBase64, android.util.Base64.DEFAULT);
+            
+            // Tentukan Nama File
+            String extension = mimetype.contains("json") ? ".json" : ".png";
+            String fileName = "PocketGuard_Backup_" + System.currentTimeMillis() + extension;
+            
+            // Simpan ke folder Download
+            java.io.File path = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
+            java.io.File file = new java.io.File(path, fileName);
+            
+            java.io.FileOutputStream fos = new java.io.FileOutputStream(file);
+            fos.write(decodedBytes);
+            fos.close();
+
+            // Beritahu sistem Android bahwa ada file baru agar muncul di Gallery/File Manager
+            android.media.MediaScannerConnection.scanFile(this, new String[]{file.getAbsolutePath()}, null, null);
+
+            // Jalankan Toast di UI Thread agar tidak error
+            runOnUiThread(() -> Toast.makeText(this, "File tersimpan di folder Download", Toast.LENGTH_LONG).show());
+            
+        } catch (Exception e) {
+            Log.e("WebToApk", "Error saving blob file", e);
+            runOnUiThread(() -> Toast.makeText(this, "Gagal menyimpan file", Toast.LENGTH_LONG).show());
+        }
     }
 
     private void registerForUnifiedPush(final String vapidPublicKey) {
