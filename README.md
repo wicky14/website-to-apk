@@ -1,5 +1,5 @@
 # Web to Apk
-updated version of website-to-apk to fulfill what i need
+updated version of website-to-apk to fulfill what i need. 
 A simple tool to convert any website into an Android APK without requiring Android Studio or Java programming knowledge. The app acts as a WebView wrapper around your chosen website.
 
 
