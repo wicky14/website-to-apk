@@ -15,7 +15,7 @@ A simple tool to convert any website into an Android APK without requiring Andro
 
 1. Clone this repository:
 ```bash
-git clone https://github.com/Jipok/website-to-apk
+git clone https://github.com/wicky14/website-to-apk.git
 cd website-to-apk
 ```
 
