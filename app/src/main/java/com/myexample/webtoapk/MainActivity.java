@@ -394,54 +394,74 @@ public class MainActivity extends AppCompatActivity {
     @JavascriptInterface
     public void processBase64(String base64Data, String mimetype) {
         try {
-            // 1. Validasi dan Pembersihan Data
-            String pureBase64;
+            // 1. Membersihkan header Base64 (jika ada)
+            // Menangani format "data:mime/type;base64,xxxx"
+            String pureBase64 = base64Data;
             if (base64Data.contains(",")) {
                 pureBase64 = base64Data.substring(base64Data.indexOf(",") + 1);
-            } else {
-                pureBase64 = base64Data;
             }
 
+            // 2. Decode string Base64 menjadi byte array
             byte[] decodedBytes = android.util.Base64.decode(pureBase64, android.util.Base64.DEFAULT);
 
-            // 2. Penentuan Nama File & Ekstensi
-            String extension = mimetype.contains("json") ? ".json" : ".png";
-            // Tambahkan pengecekan mimetype lain jika perlu (misal: pdf, zip)
-            if (mimetype.contains("pdf")) extension = ".pdf";
-            
-            String fileName = "PocketGuard_Backup_" + System.currentTimeMillis() + extension;
+            // 3. Mengambil Nama Aplikasi secara dinamis untuk prefix file
+            String appName = getApplicationInfo().loadLabel(getPackageManager()).toString();
+            String sanitizedAppName = appName.replaceAll("\\s+", "_"); // Ganti spasi dengan underscore
 
-            // 3. Penyimpanan File (Kompatibel dengan Android 10+)
-            java.io.File path = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
-            
-            // Pastikan direktori Download ada
+            // 4. Menentukan ekstensi file berdasarkan mimetype
+            String extension;
+            if (mimetype.contains("json")) {
+                extension = ".json";
+            } else if (mimetype.contains("png")) {
+                extension = ".png";
+            } else if (mimetype.contains("pdf")) {
+                extension = ".pdf";
+            } else {
+                extension = ".bin"; // Default jika tipe tidak dikenal
+            }
+
+            // 5. Membuat nama file dengan format: nama aplikasi_download_timestamp
+            String fileName = sanitizedAppName + "_download_" + System.currentTimeMillis() + extension;
+
+            // 6. Menyiapkan lokasi penyimpanan (Folder Download)
+            java.io.File path = android.os.Environment.getExternalStoragePublicDirectory(
+                    android.os.Environment.DIRECTORY_DOWNLOADS
+            );
+
+            // Pastikan folder Download sudah ada
             if (!path.exists()) {
                 path.mkdirs();
             }
 
             java.io.File file = new java.io.File(path, fileName);
+
+            // 7. Menulis data ke dalam file
             java.io.FileOutputStream fos = new java.io.FileOutputStream(file);
             fos.write(decodedBytes);
             fos.flush();
             fos.close();
 
-            // 4. Notifikasi ke MediaScanner
+            // 8. Beritahu MediaScanner agar file langsung muncul di File Manager/Gallery
             android.media.MediaScannerConnection.scanFile(
-                this, 
-                new String[]{file.getAbsolutePath()}, 
-                null, 
-                (pathStr, uri) -> Log.i("WebToApk", "File scanned: " + pathStr)
+                    this,
+                    new String[]{file.getAbsolutePath()},
+                    null,
+                    (pathStr, uri) -> android.util.Log.i("WebToApk", "File terindeks: " + pathStr)
             );
 
-            // 5. Feedback ke User di UI Thread
+            // 9. Munculkan Toast pemberitahuan di UI Thread
             runOnUiThread(() -> {
-                Toast.makeText(this, "Berhasil! File disimpan di folder Download", Toast.LENGTH_LONG).show();
+                android.widget.Toast.makeText(
+                        this, 
+                        "Berhasil: " + fileName + " tersimpan di Download", 
+                        android.widget.Toast.LENGTH_LONG
+                ).show();
             });
 
         } catch (Exception e) {
-            Log.e("WebToApk", "Error saving file: " + e.getMessage());
+            android.util.Log.e("WebToApk", "Gagal menyimpan file: " + e.getMessage());
             runOnUiThread(() -> {
-                Toast.makeText(this, "Gagal menyimpan file: " + e.getLocalizedMessage(), Toast.LENGTH_LONG).show();
+                android.widget.Toast.makeText(this, "Gagal menyimpan file!", android.widget.Toast.LENGTH_LONG).show();
             });
         }
     }
