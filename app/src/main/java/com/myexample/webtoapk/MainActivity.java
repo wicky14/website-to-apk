@@ -394,31 +394,55 @@ public class MainActivity extends AppCompatActivity {
     @JavascriptInterface
     public void processBase64(String base64Data, String mimetype) {
         try {
-            // Hapus header base64 (contoh: "data:application/json;base64,")
-            String pureBase64 = base64Data.substring(base64Data.indexOf(",") + 1);
+            // 1. Validasi dan Pembersihan Data
+            String pureBase64;
+            if (base64Data.contains(",")) {
+                pureBase64 = base64Data.substring(base64Data.indexOf(",") + 1);
+            } else {
+                pureBase64 = base64Data;
+            }
+
             byte[] decodedBytes = android.util.Base64.decode(pureBase64, android.util.Base64.DEFAULT);
-            
-            // Tentukan Nama File
+
+            // 2. Penentuan Nama File & Ekstensi
             String extension = mimetype.contains("json") ? ".json" : ".png";
+            // Tambahkan pengecekan mimetype lain jika perlu (misal: pdf, zip)
+            if (mimetype.contains("pdf")) extension = ".pdf";
+            
             String fileName = "PocketGuard_Backup_" + System.currentTimeMillis() + extension;
-            
-            // Simpan ke folder Download
+
+            // 3. Penyimpanan File (Kompatibel dengan Android 10+)
             java.io.File path = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
-            java.io.File file = new java.io.File(path, fileName);
             
+            // Pastikan direktori Download ada
+            if (!path.exists()) {
+                path.mkdirs();
+            }
+
+            java.io.File file = new java.io.File(path, fileName);
             java.io.FileOutputStream fos = new java.io.FileOutputStream(file);
             fos.write(decodedBytes);
+            fos.flush();
             fos.close();
 
-            // Beritahu sistem Android bahwa ada file baru agar muncul di Gallery/File Manager
-            android.media.MediaScannerConnection.scanFile(this, new String[]{file.getAbsolutePath()}, null, null);
+            // 4. Notifikasi ke MediaScanner
+            android.media.MediaScannerConnection.scanFile(
+                this, 
+                new String[]{file.getAbsolutePath()}, 
+                null, 
+                (pathStr, uri) -> Log.i("WebToApk", "File scanned: " + pathStr)
+            );
 
-            // Jalankan Toast di UI Thread agar tidak error
-            runOnUiThread(() -> Toast.makeText(this, "File tersimpan di folder Download", Toast.LENGTH_LONG).show());
-            
+            // 5. Feedback ke User di UI Thread
+            runOnUiThread(() -> {
+                Toast.makeText(this, "Berhasil! File disimpan di folder Download", Toast.LENGTH_LONG).show();
+            });
+
         } catch (Exception e) {
-            Log.e("WebToApk", "Error saving blob file", e);
-            runOnUiThread(() -> Toast.makeText(this, "Gagal menyimpan file", Toast.LENGTH_LONG).show());
+            Log.e("WebToApk", "Error saving file: " + e.getMessage());
+            runOnUiThread(() -> {
+                Toast.makeText(this, "Gagal menyimpan file: " + e.getLocalizedMessage(), Toast.LENGTH_LONG).show();
+            });
         }
     }
 
